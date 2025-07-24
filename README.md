@@ -1,6 +1,6 @@
 **Investigating the S&P500 stock industries(2019)**
 
-*Tablea Dashboard:*
+*Tableau Dashboard:*
 
 The Following link is a direct link to my Tableau dashboard on the S&P 500 stock from the years 2018 to 2024. 
 
