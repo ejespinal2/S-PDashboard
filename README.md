@@ -103,4 +103,4 @@ python SP_Return_Data.py              # ~1 min, downloads index data
 python SP500_2019_Predictive_Analysis.py  # runs instantly on saved Excel files
 ```
 
-The analysis script reads from `Yearly_Performance.xlsx` by default. If you have regenerated the data yourself, update the `YEARLY_FILE` variable at the top of the script to point to `sp500_yearly_performance_v2.xlsx`.
+The analysis script reads from `Yearly_Performance.xlsx` by default. If you have regenerated the data yourself, update the `YEARLY_FILE` variable at the top of the script to point to `sp500_yearly_performance.xlsx`.
