@@ -1,42 +1,101 @@
-import pandas as pd
+"""
+SP500_Stock_Return_Data.py
+------------------------------
+Downloads every S&P 500 constituent and computes per-stock:
+  - Compound monthly returns
+  - Compound yearly returns
+  - Annualised yearly volatility
+  - Yearly Sharpe ratio
+  - Max drawdown per year
+  - GICS Sector (from Wikipedia table)
+"""
+
 import yfinance as yf
+import pandas as pd
+import numpy as np
+import requests
 
-# Get the list of individual stocks in the S&P 500
+START = "2015-01-01"
+END   = "2025-07-01"
+RISK_FREE_ANNUAL = 0.04
+
+
+def compound_return(series: pd.Series) -> float:
+    if len(series) < 2 or series.iloc[0] == 0:
+        return np.nan
+    return (series.iloc[-1] / series.iloc[0]) - 1
+
+def annualised_vol(daily_rets: pd.Series) -> float:
+    return daily_rets.std() * np.sqrt(252)
+
+def max_drawdown(prices: pd.Series) -> float:
+    peak = prices.cummax()
+    return ((prices - peak) / peak).min()
+
+
+# ── Load ticker / sector table from Wikipedia ─────────────────────────────────
+print("Loading S&P 500 constituent list …")
 sp500_URL = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-data_table = pd.read_html(sp500_URL)[0]
-sp500_tickers = data_table['Symbol'].tolist()
-sp500_sectors = data_table['GICS Sector'].tolist()
+data_table = pd.read_html(sp500_URL, storage_options={"User-Agent": "Mozilla/5.0"})[0]
+tickers = data_table['Symbol'].tolist()
+sectors = data_table['GICS Sector'].tolist()
 
+# ── Download & compute ────────────────────────────────────────────────────────
+monthly_rows, yearly_rows, errors = [], [], []
 
-# Create an empty list to store the results
-stock_results = []
-
-# Loop through each stock and calculate the returns and volatility
-for stock, sector in zip(sp500_tickers, sp500_sectors):
+for i, (ticker, sector) in enumerate(zip(tickers, sectors), 1):
+    print(f"  [{i:3d}/{len(tickers)}] {ticker}", end="\r")
     try:
-        # Download the historical price data for the stock
-        stock_data = yf.download(stock, start="2015-01-01", end="2025-07-01")
+        raw = yf.download(ticker, start=START, end=END, auto_adjust=True, progress=False, multi_level_index=False)
+        if raw.empty or len(raw) < 60:
+            raise ValueError("Insufficient data")
+        prices = raw["Close"]
+        daily_ret = prices.pct_change().dropna()
 
-        # Calculate the daily returns
-        stock_data['Return'] = stock_data['Close'].pct_change()
+        # Monthly returns
+        for period_end, grp in prices.resample("ME"):
+            if len(grp) < 5:
+                continue
+            monthly_rows.append({
+                "Stock":          ticker,
+                "Sector":         sector,
+                "Date":           period_end,
+                "Monthly Return": compound_return(grp),
+            })
 
-        # Resample the data by month and year
-        monthly_returns = stock_data['Return'].resample('M').sum()
-        yearly_returns = stock_data['Return'].resample('Y').sum()
-        yearly_volatility = stock_data['Return'].resample('Y').std() * (252 ** 0.5)
+        # Yearly aggregates
+        for period_end, price_grp in prices.resample("YE"):
+            price_grp = price_grp.squeeze()
+            ret_grp = daily_ret.reindex(price_grp.index).dropna()
+            if len(price_grp) < 50:
+                continue
+            yr  = compound_return(price_grp)
+            vol = annualised_vol(ret_grp)
+            yearly_rows.append({
+                "Stock":              ticker,
+                "Sector":             sector,
+                "Year":               period_end.year,
+                "Yearly Return":      yr,
+                "Yearly Volatility":  vol,
+                "Yearly Sharpe":      (yr - RISK_FREE_ANNUAL) / vol if vol > 0 else np.nan,
+                "Max Drawdown":       max_drawdown(price_grp),
+            })
 
-        # Create a new DataFrame with the individual returns and volatility for each month and year
-        monthly_returns_df = pd.DataFrame({'Stock': [stock] * len(monthly_returns), 'Date': monthly_returns.index, 'Monthly Return': monthly_returns.values, 'Sector': [sector] * len(monthly_returns)})
-        yearly_returns_df = pd.DataFrame({'Stock': [stock] * len(yearly_returns), 'Date': yearly_returns.index, 'Yearly Return': yearly_returns.values, 'Sector': [sector] * len(yearly_returns)})
-        yearly_volatility_df = pd.DataFrame({'Stock': [stock] * len(yearly_volatility), 'Date': yearly_volatility.index, 'Yearly Volatility': yearly_volatility.values, 'Sector': [sector] * len(yearly_volatility)})
+    except Exception as exc:
+        errors.append({"Stock": ticker, "Error": str(exc)})
 
-        # Append the results to the list
-        stock_results.append(pd.concat([monthly_returns_df, yearly_returns_df, yearly_volatility_df], ignore_index=True))
-    except Exception as e:
-        print(f"Error processing stock {stock}: {e}")
+print("\nDone downloading.")
 
-# Concatenate the results into a single DataFrame
-stock_results_df = pd.concat(stock_results, ignore_index=True)
+# ── Save outputs ──────────────────────────────────────────────────────────────
+monthly_df = pd.DataFrame(monthly_rows)
+yearly_df  = pd.DataFrame(yearly_rows)
 
-# Save the results to a new Excel file
-stock_results_df.to_excel("sp500_stock_returns.xlsx", index=False)
+monthly_df.to_excel("sp500_stock_returns.xlsx", index=False, sheet_name="Monthly")
+yearly_df.to_excel("sp500_yearly_performance.xlsx", index=False, sheet_name="Yearly")
+
+if errors:
+    pd.DataFrame(errors).to_csv("download_errors.csv", index=False)
+    print(f"  {len(errors)} tickers failed — see download_errors.csv")
+
+print(f"Saved {len(monthly_df):,} monthly rows → sp500_stock_returns.xlsx")
+print(f"Saved {len(yearly_df):,} yearly rows  → sp500_yearly_performance.xlsx")

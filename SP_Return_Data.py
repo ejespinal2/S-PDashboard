@@ -1,24 +1,83 @@
+"""
+SP_Return_Data.py
+--------------------
+Downloads S&P 500 index("^GSPC") historical data and computes:
+  - Proper compound monthly/yearly returns
+  - Annualised yearly volatility
+  - Sharpe ratio (using 3-month T-bill as risk-free rate)
+  - Max drawdown per year
+"""
+
 import yfinance as yf
 import pandas as pd
+import numpy as np
 
-sp500_ticker = "^GSPC"
-sp500_data = yf.download(sp500_ticker, start="2015-01-01", end="2025-07-01")
+START = "2015-01-01"
+END   = "2025-07-01"
+RISK_FREE_ANNUAL = 0.04          # approximate 10-yr average 3-mo T-bill
 
-# Calculate daily returns
-sp500_data['Return'] = sp500_data['Close'].pct_change()
+def compound_return(series: pd.Series) -> float:
+    """True compound return from a daily price series."""
+    return (series.iloc[-1] / series.iloc[0]) - 1
 
-# Calculate monthly returns
-monthly_returns = sp500_data['Return'].resample('ME' , label='right').sum()
+def annualised_volatility(daily_returns: pd.Series) -> float:
+    return daily_returns.std() * np.sqrt(252)
 
-# Calculate yearly returns
-yearly_returns = sp500_data['Return'].resample('YE').sum()
+def max_drawdown(prices: pd.Series) -> float:
+    peak = prices.cummax()
+    drawdown = (prices - peak) / peak
+    return drawdown.min()
 
-# Calculate yearly volatility
-yearly_volatility = sp500_data['Return'].resample('YE').std() * (252 ** 0.5)
 
-# Create a new DataFrame with monthly and yearly returns, and yearly volatility
-returns_df = pd.DataFrame({'Monthly Returns': monthly_returns, 'Yearly Returns': yearly_returns, 'Yearly Volatility': yearly_volatility})
+# ── Download ──────────────────────────────────────────────────────────────────
+print("Downloading S&P 500 index data …")
+raw = yf.download("^GSPC", start=START, end=END, auto_adjust=True)
+prices = raw["Close"].squeeze()
+daily_ret = prices.pct_change().dropna()
 
-# Save the returns to am excel spreadsheet
-returns_df.to_excel("sp500_returns.xlsx", index=True)
-print("Successfully saved returns to sp500_returns.csv")
+# ── Monthly returns ───────────────────────────────────────────────────────────
+monthly_returns = (
+    prices
+    .resample("ME")
+    .apply(compound_return)
+    .rename("Monthly Return")
+)
+
+# ── Yearly aggregates ─────────────────────────────────────────────────────────
+yearly_returns = (
+    prices
+    .resample("YE")
+    .apply(compound_return)
+    .rename("Yearly Return")
+)
+
+yearly_vol = (
+    daily_ret
+    .resample("YE")
+    .apply(annualised_volatility)
+    .rename("Yearly Volatility")
+)
+
+yearly_sharpe = (
+    ((yearly_returns - RISK_FREE_ANNUAL) / yearly_vol)
+    .rename("Yearly Sharpe")
+)
+
+yearly_drawdown = (
+    prices
+    .resample("YE")
+    .apply(max_drawdown)
+    .rename("Max Drawdown")
+)
+
+# ── Combine & save ────────────────────────────────────────────────────────────
+index_df = pd.concat(
+    [monthly_returns, yearly_returns, yearly_vol, yearly_sharpe, yearly_drawdown],
+    axis=1
+)
+index_df.index.name = "Date"
+
+output = "sp500_returns.xlsx"
+index_df.to_excel(output)
+print(f"Saved → {output}")
+print(index_df[["Yearly Return", "Yearly Volatility", "Yearly Sharpe"]].dropna().to_string())
