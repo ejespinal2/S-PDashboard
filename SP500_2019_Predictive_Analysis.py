@@ -334,12 +334,6 @@ print("Saved figures/fig4_mean_reversion_sectors.png")
 
 # ── Save predictions spreadsheet ──────────────────────────────────────────────
 results = results.sort_values("GBM_Pred", ascending=False)
-results["Yearly Return"]  = results["Yearly Return"].map("{:.2%}".format)
-results["GBM_Pred"]       = results["GBM_Pred"].map("{:.2%}".format)
-results["Ridge_Pred"]     = results["Ridge_Pred"].map("{:.2%}".format)
-results["GBM_Error"]      = results["GBM_Error"].map("{:.2%}".format)
-results["Ridge_Error"]    = results["Ridge_Error"].map("{:.2%}".format)
 results.to_excel("sp500_2019_predictions.xlsx", index=False)
 print("\nSaved sp500_2019_predictions.xlsx")
-
 print("\n✓ All outputs complete.")
