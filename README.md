@@ -2,7 +2,7 @@
 
 Was the 2019 S&P 500 rally predictable? This project investigates that question by building a machine learning model trained exclusively on 2016–2018 data and testing it against actual 2019 outcomes. The model achieves an R² of 0.37, suggesting that a meaningful portion of 2019's cross-sectional stock performance was foreseeable from signals that existed before the year began.
 
-**[View the Tableau Dashboard →](https://public.tableau.com/views/SP5002019StockData/Dashboard2?:language=en-US&publish=yes&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)**
+**[View the Tableau Dashboard →](https://public.tableau.com/views/SP5002019-WastheBigJumpPredictable/Wasthe2019SP500ChangesPredictable?:language=en-US&publish=yes&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)**
 
 ---
 
